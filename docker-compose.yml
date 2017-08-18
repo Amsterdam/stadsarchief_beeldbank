@@ -1,0 +1,28 @@
+version: "3.0"
+services:
+  database:
+    image: build.datapunt.amsterdam.nl:5000/atlas/postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: beeldbank
+      POSTGRES_USER: beeldbank
+      POSTGRES_PASSWORD: insecure
+
+  import:
+    build: import/
+    ports:
+      - "8109:8000"
+    links:
+      - database
+    environment:
+      - DATAPUNT_API_URL=${DATAPUNT_API_URL:-https://api.data.amsterdam.nl/}
+      - SECRET_KEY=insecure
+      - DATABASE_NAME=beeldbank
+      - DATABASE_USER=beeldbank
+      - DATABASE_PASSWORD=insecure
+      - JWT_SHARED_SECRET_KEY=insecure1234567890
+      - UWSGI_HTTP=0.0.0.0:8000
+      - UWSGI_MODULE=beeldbank.wsgi
+      - UWSGI_CALLABLE=application
+      - UWSGI_MASTER=1
