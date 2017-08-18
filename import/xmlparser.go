@@ -31,7 +31,7 @@ type BeeldbankImage struct {
 	//Rights,
 	//Date,
 	//Dataclean,
-	//Levering,
+	//Levering      string
 	//Leveringsvoorwaarden,
 }
 
@@ -42,17 +42,34 @@ var (
 	// total found images
 	imageCount int
 	duplicates int
+	success    int
+	failed     int
 
 	// source of beeldbank xml files
 	sourceXMLdir string
+
+	metaImageChan       chan *[]string
+	metaImageColumns    []string
+	locationChan        chan *[]string
+	locationChanColumns []string
 )
 
 func init() {
 	imageCount = 0
 	duplicates = 0
+	success = 0
+	failed = 0
 	imageIds = make(map[string]BeeldbankImage)
 	// TODO make environment variable
 	sourceXMLdir = "/app/data"
+
+	metaImageChan = make(chan *[]string, 3000)
+	metaImageColumns = []string{
+		"image_id",
+		"source",
+		"type",
+		"adres",
+	}
 }
 
 func logdupes(i1 BeeldbankImage, i2 BeeldbankImage) {
@@ -73,6 +90,27 @@ creator %-15s  %15s
 	)
 }
 
+//parse single rdf / xml description of image
+func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *string) {
+
+	var bbImage BeeldbankImage
+	var id string
+
+	decoder.DecodeElement(&bbImage, xmlNode)
+
+	id = bbImage.Identifier
+	bbImage.FileName = *sourcefile
+
+	if _, ok := imageIds[id]; ok {
+		log.Println("DUPLICATES FOUND! : ", id)
+		logdupes(imageIds[id], bbImage)
+		duplicates += 1
+	} else {
+		imageIds[id] = bbImage
+	}
+}
+
+//parse one source xml file
 func parseSingleXML(sourcefile string) {
 
 	log.Println("Parsing:", sourcefile)
@@ -101,8 +139,6 @@ func parseSingleXML(sourcefile string) {
 			panic(err)
 		}
 
-		var bbImage BeeldbankImage
-		var id string
 		// Inspect the type of the token just read.
 		switch xmlNode := token.(type) {
 
@@ -112,24 +148,13 @@ func parseSingleXML(sourcefile string) {
 			if xmlNode.Name.Local == "Description" {
 				imageCount += 1
 				// decode a whole chunk of following XML into the
-				// variable bbImage which is a Page (xmlNode above)
-				decoder.DecodeElement(&bbImage, &xmlNode)
-				id = bbImage.Identifier
-				bbImage.FileName = sourcefile
-
-				if _, ok := imageIds[id]; ok {
-					log.Println("DUPLICATES FOUND! : ", id)
-					logdupes(imageIds[id], bbImage)
-					duplicates += 1
-				} else {
-					imageIds[id] = bbImage
-				}
-
-			} else {
-				//log.Printf("Name %s", xmlNode.Name.Local)
+				// variable bbImage which is a BeeldbankImage (xmlNode above)
+				parseXMLNode(decoder, &xmlNode, &sourcefile)
 			}
 		}
 	}
+	//prints some stats.
+	logcounts()
 }
 
 func findXMLFiles() []string {
@@ -157,7 +182,12 @@ func importXMLbeelbank() {
 	}
 }
 
-func main() {
-	importXMLbeelbank()
+func logcounts() {
 	log.Printf("Parsed Images: %d   duplicates %d ", imageCount, duplicates)
+}
+
+func main() {
+	Migrate()
+	//importXMLbeelbank()
+	//logcounts()
 }
