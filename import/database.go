@@ -99,6 +99,10 @@ func normalizeRow(record *[]string) ([]interface{}, error) {
 
 	for i, field := range *record {
 
+		if field == "" {
+			cols[i] = nil
+			continue
+		}
 		cols[i] = field
 
 	}

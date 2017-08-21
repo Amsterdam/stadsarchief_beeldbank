@@ -39,6 +39,7 @@ xmlns:sr="stadsarchief.amsterdam.nl/rechten/sr#"
 <sk:parameter name="collectie">Archief van de Rooimeesters, later Bouwopzichters</sk:parameter>
 <sk:parameter name="datering">18610426-18610426</sk:parameter>
 <sk:parameter name="geografische naam"><name>Recht Boomssloot</name><number_from>14</number_from><number_to>14</number_to></sk:parameter>
+<sk:parameter name="geografische naam"><name>Krom Boomssloot</name><number_from>10</number_from><number_to>13</number_to></sk:parameter>
 <sr:parameter name="rechthebbende">Auteursrechtvrij</sr:parameter>
 <sr:parameter name="levering">ja</sr:parameter>
 <sr:parameter name="download of print">ja</sr:parameter>

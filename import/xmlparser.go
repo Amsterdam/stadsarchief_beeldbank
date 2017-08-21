@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/jinzhu/gorm"
@@ -24,24 +25,22 @@ type Parameter struct {
 
 //BeeldbankImageXML is XML image mapping
 type BeeldbankImageXML struct {
-	Identifier    string      `xml:"identifier"`
-	Source        string      `xml:"source"`
-	Type          string      `xml:"type"`
-	Title         string      `xml:"title"`
-	GeoName       string      `xml:"subject"`
-	Creator       string      `xml:"creator"`
-	ParameterList []Parameter `xml:"parameter"`
-	Provenance    string      `xml:"provenance"`
-	Rights        string      `xml:"rights"`
-	DateText      string      `xml:"date"`
-	FileName      string
-	//Number,
-	Description string `xml:"description"`
-	//Rights,
-	//Date,
-	//Dataclean,
-	//Levering      string
-	//Leveringsvoorwaarden,
+	Identifier           string      `xml:"identifier"`
+	Source               string      `xml:"source"`
+	Type                 string      `xml:"type"`
+	Title                string      `xml:"title"`
+	GeoName              string      `xml:"subject"`
+	Creator              string      `xml:"creator"`
+	ParameterList        []Parameter `xml:"parameter"`
+	Provenance           string      `xml:"provenance"`
+	Rights               string      `xml:"rights"`
+	DateText             string      `xml:"date"`
+	Description          string      `xml:"description"`
+	FileName             string
+	DateFrom             string
+	DateTo               string
+	Levering             bool
+	Leveringsvoorwaarden string
 }
 
 var (
@@ -54,12 +53,12 @@ var (
 	wg         sync.WaitGroup
 	DB         *gorm.DB
 	// source of beeldbank xml files
-	metaImageChan       chan *[]string
-	imagelocationChan   chan *[]string
-	metaImageColumns    []string
-	locationChan        chan *[]string
-	locationChanColumns []string
-	Config              ConfigSpec
+	locatieImageChan  chan *[]string
+	metaImageChan     chan *[]string
+	imagelocationChan chan *[]string
+	metaImageColumns  []string
+	locationColumns   []string
+	Config            ConfigSpec
 )
 
 type ConfigSpec struct {
@@ -80,6 +79,7 @@ func init() {
 	imageIds = make(map[string]BeeldbankImageXML)
 	// TODO make environment variable
 	metaImageChan = make(chan *[]string, 3000)
+	locatieImageChan = make(chan *[]string, 3000)
 	metaImageColumns = []string{
 		"image_id",
 		"type",
@@ -95,6 +95,12 @@ func init() {
 		//"date_from",
 		//"date_to",
 		//"adres",
+	}
+	locationColumns = []string{
+		"image_id",
+		"streetname",
+		"number_from",
+		"number_to",
 	}
 }
 
@@ -142,6 +148,18 @@ func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *s
 
 }
 
+func parseDateRange(dates string, image *BeeldbankImageXML) {
+	sdates := strings.Split(dates, "-")
+
+	if len(sdates) == 2 {
+		image.DateFrom = sdates[0]
+		image.DateTo = sdates[1]
+	} else if len(dates) == 1 {
+		image.DateFrom = sdates[1]
+		image.DateTo = sdates[1]
+	}
+}
+
 //sendMetaImageInChannel as string array
 func sendMetaImageInChannel(image *BeeldbankImageXML) {
 
@@ -157,7 +175,35 @@ func sendMetaImageInChannel(image *BeeldbankImageXML) {
 		image.Description, //description
 	}
 
+	for _, param := range image.ParameterList {
+		//log.Println(param)
+		switch paramName := param.Name; paramName {
+		case "datering":
+			//log.Println("datering")
+			dates := param.Value
+			parseDateRange(dates, image)
+		case "levering":
+			//log.Println("levering")
+			if param.Value == "ja" {
+				image.Levering = true
+			} else {
+				image.Levering = false
+			}
+		case "geografische naam":
+
+			locatie := []string{
+				image.Identifier,
+				param.Straatnaam,
+				param.NumberFrom,
+				param.NumberTo,
+			}
+			locatieImageChan <- &locatie
+
+		}
+	}
+
 	metaImageChan <- &imageinfo
+
 }
 
 //parse one source xml file
@@ -232,6 +278,7 @@ func importXMLbeeldbank() {
 	}
 
 	close(metaImageChan)
+	close(locatieImageChan)
 }
 
 func logcounts() {
@@ -241,9 +288,10 @@ func logcounts() {
 func startImport() {
 	//prepare database
 	Migrate()
-	wg.Add(1)
 	//open database table
+	wg.Add(2)
 	go StreamInTable("beeldbank_images", metaImageColumns, metaImageChan)
+	go StreamInTable("image_locations", locationColumns, locatieImageChan)
 	//stream xml into database
 	importXMLbeeldbank()
 	wg.Wait()
