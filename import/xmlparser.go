@@ -7,8 +7,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
+
+	"github.com/jinzhu/gorm"
 )
 
+//Parameter information on images extra variables
 type Parameter struct {
 	Name       string `xml:"name,attr"`
 	Value      string `xml:",chardata"`
@@ -17,7 +21,8 @@ type Parameter struct {
 	NumberTo   string `xml:"number_to"`
 }
 
-type BeeldbankImage struct {
+//BeeldbankImageXML is XML image mapping
+type BeeldbankImageXML struct {
 	Identifier    string      `xml:"identifier"`
 	Source        string      `xml:"source"`
 	Type          string      `xml:"type"`
@@ -36,18 +41,16 @@ type BeeldbankImage struct {
 }
 
 var (
-	columns []string
-
-	imageIds map[string]BeeldbankImage
+	imageIds map[string]BeeldbankImageXML
 	// total found images
 	imageCount int
 	duplicates int
 	success    int
 	failed     int
-
+	wg         sync.WaitGroup
+	DB         *gorm.DB
 	// source of beeldbank xml files
-	sourceXMLdir string
-
+	sourceXMLdir        string
 	metaImageChan       chan *[]string
 	metaImageColumns    []string
 	locationChan        chan *[]string
@@ -59,20 +62,19 @@ func init() {
 	duplicates = 0
 	success = 0
 	failed = 0
-	imageIds = make(map[string]BeeldbankImage)
+	imageIds = make(map[string]BeeldbankImageXML)
 	// TODO make environment variable
 	sourceXMLdir = "/app/data"
-
 	metaImageChan = make(chan *[]string, 3000)
 	metaImageColumns = []string{
 		"image_id",
-		"source",
+		//"source",
 		"type",
-		"adres",
+		//"adres",
 	}
 }
 
-func logdupes(i1 BeeldbankImage, i2 BeeldbankImage) {
+func logdupes(i1 BeeldbankImageXML, i2 BeeldbankImageXML) {
 
 	log.Printf(`
 id	%-15s  %15s
@@ -93,7 +95,7 @@ creator %-15s  %15s
 //parse single rdf / xml description of image
 func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *string) {
 
-	var bbImage BeeldbankImage
+	var bbImage BeeldbankImageXML
 	var id string
 
 	decoder.DecodeElement(&bbImage, xmlNode)
@@ -104,10 +106,23 @@ func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *s
 	if _, ok := imageIds[id]; ok {
 		log.Println("DUPLICATES FOUND! : ", id)
 		logdupes(imageIds[id], bbImage)
-		duplicates += 1
+		duplicates++
 	} else {
 		imageIds[id] = bbImage
+		sendMetaImageInChannel(&bbImage)
 	}
+
+}
+
+//sendMetaImageInChannel as string array
+func sendMetaImageInChannel(image *BeeldbankImageXML) {
+
+	array := []string{
+		image.Identifier, //image_id
+		image.Type,       //type
+	}
+
+	metaImageChan <- &array
 }
 
 //parse one source xml file
@@ -146,9 +161,9 @@ func parseSingleXML(sourcefile string) {
 			// If we just read a StartElement token
 			// ...and its name is "rdf:Description"
 			if xmlNode.Name.Local == "Description" {
-				imageCount += 1
+				imageCount++
 				// decode a whole chunk of following XML into the
-				// variable bbImage which is a BeeldbankImage (xmlNode above)
+				// variable bbImage which is a BeeldbankImageXML
 				parseXMLNode(decoder, &xmlNode, &sourcefile)
 			}
 		}
@@ -159,7 +174,7 @@ func parseSingleXML(sourcefile string) {
 
 func findXMLFiles() []string {
 
-	files, err := filepath.Glob(fmt.Sprintf("%s/*.xml", sourceXMLdir))
+	files, err := filepath.Glob(fmt.Sprintf("%s/b2*.xml", sourceXMLdir))
 
 	if err != nil {
 		panic(err)
@@ -173,13 +188,15 @@ func findXMLFiles() []string {
 	return files
 }
 
-func importXMLbeelbank() {
+func importXMLbeeldbank() {
 
 	files := findXMLFiles()
 
 	for _, file := range files {
 		parseSingleXML(file)
 	}
+
+	close(metaImageChan)
 }
 
 func logcounts() {
@@ -187,7 +204,14 @@ func logcounts() {
 }
 
 func main() {
+
+	DBConnect(ConnectStr())
+
 	Migrate()
-	//importXMLbeelbank()
-	//logcounts()
+	wg.Add(1)
+	go StreamInTable("beeldbank_images", metaImageColumns, metaImageChan)
+	importXMLbeeldbank()
+	wg.Wait()
+	DB.Close()
+	logcounts()
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 )
 
+//GeoPoint for in geodatabase
 type GeoPoint struct {
 	Lng float64 `json:"lng"`
 	Lat float64 `json:"lat"`
@@ -17,6 +18,7 @@ func (p *GeoPoint) String() string {
 	return fmt.Sprintf("SRID=4326;POINT(%v %v)", p.Lng, p.Lat)
 }
 
+//Scan value of database into struct
 func (p *GeoPoint) Scan(val interface{}) error {
 	b, err := hex.DecodeString(string(val.([]uint8)))
 	if err != nil {
@@ -50,6 +52,7 @@ func (p *GeoPoint) Scan(val interface{}) error {
 	return nil
 }
 
+//Value of GeoPoint in SQL
 func (p GeoPoint) Value() (driver.Value, error) {
 	return p.String(), nil
 }

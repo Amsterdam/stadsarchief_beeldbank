@@ -11,18 +11,21 @@ import (
 	"github.com/lib/pq"
 )
 
-type Locatie struct {
-	ID              uint `gorm:"primary_key"`
-	ImageID         string
-	AdresIndicatie  string
-	Huisnummer_from int
-	Huisnummer_to   int
-	CreatedAt       time.Time
+//LocatieModel of and Image. One image can have a multiple
+//location indications
+type LocatieModel struct {
+	ID             uint `gorm:"primary_key"`
+	ImageID        string
+	AdresIndicatie string
+	HuisnummerFrom int
+	HuisnummerTo   int
+	CreatedAt      time.Time
 
 	Geom GeoPoint `sql:"type:geometry(Geometry,4326)"`
 }
 
-type BeelbankImage struct {
+//BeeldbankImageModel database model
+type BeeldbankImage struct {
 	ID                   uint   `gorm:"primary_key"`
 	ImageID              string `gorm:"unique_index"`
 	Source               string
@@ -52,33 +55,26 @@ func ConnectStr() string {
 	)
 }
 
-//setup a database connection
-func dbConnect(connectStr string) (db *gorm.DB, err error) {
+//DBConnect setup a database connection
+func DBConnect(connectStr string) {
 	//db, err := sql.Open("postgres", connectStr)
-	db, err = gorm.Open("postgres", connectStr)
-
-	if err != nil {
-		return
-	}
-
-	return db, nil
-
-}
-
-func Migrate() {
-	log.Printf("Create db tables..")
-
-	db, err := dbConnect(ConnectStr())
+	db, err := gorm.Open("postgres", connectStr)
 
 	if err != nil {
 		panic(err)
 	}
 
-	db.DropTableIfExists(&Locatie{}, &BeelbankImage{})
-	//Db = db
-	db.AutoMigrate(&Locatie{}, &BeelbankImage{})
+	DB = db
+}
 
-	defer db.Close()
+//Migrate add missing tables to database
+func Migrate() {
+	log.Printf("Create db tables..")
+
+	DB.DropTableIfExists(&LocatieModel{}, &BeeldbankImage{})
+	//Db = db
+	DB.AutoMigrate(&LocatieModel{}, &BeeldbankImage{})
+
 }
 
 //SQLImport import structure
@@ -98,7 +94,7 @@ func (i *SQLImport) Commit() error {
 
 	_, err := i.stmt.Exec()
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	// Statement might already be closed
@@ -109,7 +105,7 @@ func (i *SQLImport) Commit() error {
 }
 
 //NewImport setup a new import struct
-func NewImport(db *sql.DB, schema string, tableName string, columns []string) (*SQLImport, error) {
+func newImport(db *sql.DB, schema string, tableName string, columns []string) (*SQLImport, error) {
 
 	txn, err := db.Begin()
 
@@ -140,23 +136,18 @@ func normalizeRow(record *[]string) ([]interface{}, error) {
 
 //print columns we try to put in database
 func printCols(cols []interface{}) {
-	log.Println("\ncolumns:")
+	log.Printf("columns:")
 	for i, field := range cols {
 		log.Printf("%2d %32s", i, field)
 	}
 }
 
-func streamInTable(tablename string, columns []string, rows <-chan *[]string) error {
+//StreamInTable data from channel into specified database table.
+func StreamInTable(tablename string, columns []string, rows <-chan *[]string) {
 
-	db, err := dbConnect(ConnectStr())
+	cdb := DB.CommonDB().(*sql.DB)
 
-	if err != nil {
-		panic(err)
-	}
-
-	cdb := db.CommonDB().(*sql.DB)
-
-	pgTable, err := NewImport(cdb, "public", tablename, columns)
+	pgTable, err := newImport(cdb, "public", tablename, columns)
 
 	if err != nil {
 		panic(err)
@@ -174,11 +165,12 @@ func streamInTable(tablename string, columns []string, rows <-chan *[]string) er
 
 		if err := pgTable.AddRow(cols...); err != nil {
 			printCols(cols)
-			return err
+			panic(err)
 		}
 
 		success++
 	}
-
-	return nil
+	log.Println("DONE!")
+	pgTable.Commit()
+	wg.Done()
 }
