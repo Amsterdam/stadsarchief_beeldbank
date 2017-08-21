@@ -4,76 +4,48 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/lib/pq"
 )
 
-//LocatieModel of and Image. One image can have a multiple
-//location indications
-type LocatieModel struct {
-	ID             uint `gorm:"primary_key"`
-	ImageID        string
-	AdresIndicatie string
-	HuisnummerFrom int
-	HuisnummerTo   int
-	CreatedAt      time.Time
-
-	Geom GeoPoint `sql:"type:geometry(Geometry,4326)"`
-}
-
-//BeeldbankImageModel database model
-type BeeldbankImage struct {
-	ID                   uint   `gorm:"primary_key"`
-	ImageID              string `gorm:"unique_index"`
-	Source               string
-	Type                 string
-	Creator              string
-	LeveringsVoorwaarden string
-	Levering             bool
-	CreatedAt            time.Time
-	DateringText         string
-	DateFrom             string
-	DateTo               string
-	Geom                 GeoPoint `sql:"type:geometry(Geometry,4326)"`
-}
-
 //ConnectStr create string to connect to database
 func ConnectStr() string {
 
 	otherParams := "sslmode=disable connect_timeout=5"
-	return fmt.Sprintf(
-		"user=%s dbname=%s password='%s' host=%s port=%s %s",
-		"beeldbank",
-		"beeldbank",
-		"insecure",
-		"database",
-		"5432",
+	connectString := fmt.Sprintf(
+		"user=%s dbname=%s password='%s' host=%s port=%d %s",
+		Config.User,
+		Config.Database,
+		Config.Password,
+		Config.Host,
+		Config.Port,
 		otherParams,
 	)
+	fmt.Println("Connecting..:", connectString)
+	return connectString
 }
 
 //DBConnect setup a database connection
-func DBConnect(connectStr string) {
+func DBConnect(connectStr string) *gorm.DB {
 	//db, err := sql.Open("postgres", connectStr)
 	db, err := gorm.Open("postgres", connectStr)
 
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
 
-	DB = db
+	return db
 }
 
 //Migrate add missing tables to database
 func Migrate() {
 	log.Printf("Create db tables..")
 
-	DB.DropTableIfExists(&LocatieModel{}, &BeeldbankImage{})
+	DB.DropTableIfExists(&ImageLocation{}, &BeeldbankImage{})
 	//Db = db
-	DB.AutoMigrate(&LocatieModel{}, &BeeldbankImage{})
+	DB.AutoMigrate(&ImageLocation{}, &BeeldbankImage{})
 
 }
 
@@ -138,7 +110,7 @@ func normalizeRow(record *[]string) ([]interface{}, error) {
 func printCols(cols []interface{}) {
 	log.Printf("columns:")
 	for i, field := range cols {
-		log.Printf("%2d %32s", i, field)
+		log.Printf("%2d %-250s", i, field)
 	}
 }
 
@@ -170,7 +142,13 @@ func StreamInTable(tablename string, columns []string, rows <-chan *[]string) {
 
 		success++
 	}
+
 	log.Println("DONE!")
-	pgTable.Commit()
+	err = pgTable.Commit()
+
+	if err != nil {
+		panic(err)
+	}
+
 	wg.Done()
 }

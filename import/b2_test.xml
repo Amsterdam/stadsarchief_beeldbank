@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<rdf:RDF
+xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+xmlns:dc="http://purl.org/dc/elements/1.1/"
+xmlns:sa="stadsarchief.amsterdam.nl/actie/sa#"
+xmlns:sk="stadsarchief.amsterdam.nl/kenmerken/sk#"
+xmlns:sr="stadsarchief.amsterdam.nl/rechten/sr#"
+>
+<rdf:Description rdf:about="005220900036.jpg">
+<sa:parameter name="actie">update</sa:parameter>
+<dc:identifier>005220900036</dc:identifier>
+<dc:source>http://archief.amsterdam/archief/5220/186</dc:source>
+<dc:type name="documenttype">bouwtekening</dc:type>
+<dc:title>Batavierstraat 95</dc:title>
+<dc:description>Ontwerp met opstand van de voorgevel voor het veranderen van het perceel</dc:description>
+<dc:provenance name="collectie">Archief van de Rooimeesters, later Bouwopzichters</dc:provenance>
+<dc:rights name="rechthebbende">Auteursrechtvrij</dc:rights>
+<dc:date name="datering">26 februari 1862 t/m 6 maart 1862</dc:date>
+<sk:parameter name="documenttype">bouwtekening</sk:parameter>
+<sk:parameter name="collectie">Archief van de Rooimeesters, later Bouwopzichters</sk:parameter>
+<sk:parameter name="datering">18620226-18620306</sk:parameter>
+<sr:parameter name="rechthebbende">Auteursrechtvrij</sr:parameter>
+<sr:parameter name="levering">ja</sr:parameter>
+<sr:parameter name="download of print">ja</sr:parameter>
+<sr:parameter name="leveringsvoorwaarden"><![CDATA[-]]></sr:parameter>
+</rdf:Description>
+<rdf:Description rdf:about="005220900144.jpg">
+<sa:parameter name="actie">update</sa:parameter>
+<dc:identifier>005220900144</dc:identifier>
+<dc:source>http://archief.amsterdam/archief/5220/183</dc:source>
+<dc:type name="documenttype">bouwtekening</dc:type>
+<dc:title>Pakhuis de Herstelde aan de Recht Boomssloot 14</dc:title>
+<dc:description>Ontwerptekening met aanzicht voor de verbouwing van het pakhuis de Herstelde</dc:description>
+<dc:provenance name="collectie">Archief van de Rooimeesters, later Bouwopzichters</dc:provenance>
+<dc:rights name="rechthebbende">Auteursrechtvrij</dc:rights>
+<dc:date name="datering">26 april 1861</dc:date>
+<dc:subject name="geografische naam">Recht Boomssloot 14</dc:subject>
+<sk:parameter name="documenttype">bouwtekening</sk:parameter>
+<sk:parameter name="collectie">Archief van de Rooimeesters, later Bouwopzichters</sk:parameter>
+<sk:parameter name="datering">18610426-18610426</sk:parameter>
+<sk:parameter name="geografische naam"><name>Recht Boomssloot</name><number_from>14</number_from><number_to>14</number_to></sk:parameter>
+<sr:parameter name="rechthebbende">Auteursrechtvrij</sr:parameter>
+<sr:parameter name="levering">ja</sr:parameter>
+<sr:parameter name="download of print">ja</sr:parameter>
+<sr:parameter name="leveringsvoorwaarden"><![CDATA[-]]></sr:parameter>
+</rdf:Description>
+</rdf:RDF>

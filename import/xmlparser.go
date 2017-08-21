@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/jinzhu/gorm"
+	"github.com/kelseyhightower/envconfig"
 )
 
 //Parameter information on images extra variables
@@ -30,9 +31,12 @@ type BeeldbankImageXML struct {
 	GeoName       string      `xml:"subject"`
 	Creator       string      `xml:"creator"`
 	ParameterList []Parameter `xml:"parameter"`
+	Provenance    string      `xml:"provenance"`
+	Rights        string      `xml:"rights"`
+	DateText      string      `xml:"date"`
 	FileName      string
 	//Number,
-	//Description,
+	Description string `xml:"description"`
 	//Rights,
 	//Date,
 	//Dataclean,
@@ -50,12 +54,23 @@ var (
 	wg         sync.WaitGroup
 	DB         *gorm.DB
 	// source of beeldbank xml files
-	sourceXMLdir        string
 	metaImageChan       chan *[]string
+	imagelocationChan   chan *[]string
 	metaImageColumns    []string
 	locationChan        chan *[]string
 	locationChanColumns []string
+	Config              ConfigSpec
 )
+
+type ConfigSpec struct {
+	Debug    bool   `default:"false"`
+	Port     int    `default:"5432"`
+	User     string `default:"beeldbank"`
+	Password string `default:"insecure"`
+	Database string `default:"beeldbank"`
+	Host     string `default:"database"`
+	DataPath string `default:"/app/data"`
+}
 
 func init() {
 	imageCount = 0
@@ -64,12 +79,21 @@ func init() {
 	failed = 0
 	imageIds = make(map[string]BeeldbankImageXML)
 	// TODO make environment variable
-	sourceXMLdir = "/app/data"
 	metaImageChan = make(chan *[]string, 3000)
 	metaImageColumns = []string{
 		"image_id",
-		//"source",
 		"type",
+		"source",
+		"title",
+		"creator",
+		"provenance",
+		"rights",
+		//"leverings_voorwaarden",
+		//"levering",
+		"date_text",
+		"description",
+		//"date_from",
+		//"date_to",
 		//"adres",
 	}
 }
@@ -92,13 +116,17 @@ creator %-15s  %15s
 	)
 }
 
-//parse single rdf / xml description of image
+//parseXMLNode parse single rdf / xml description of image
+//detects duplicate ImageID's
 func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *string) {
 
 	var bbImage BeeldbankImageXML
 	var id string
 
-	decoder.DecodeElement(&bbImage, xmlNode)
+	err := decoder.DecodeElement(&bbImage, xmlNode)
+	if err != nil {
+		panic(err.Error())
+	}
 
 	id = bbImage.Identifier
 	bbImage.FileName = *sourcefile
@@ -117,12 +145,19 @@ func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *s
 //sendMetaImageInChannel as string array
 func sendMetaImageInChannel(image *BeeldbankImageXML) {
 
-	array := []string{
-		image.Identifier, //image_id
-		image.Type,       //type
+	imageinfo := []string{
+		image.Identifier,  //image_id
+		image.Type,        //type
+		image.Source,      //source
+		image.Title,       //title
+		image.Creator,     //creator
+		image.Provenance,  //provenance
+		image.Rights,      //rights
+		image.DateText,    //date_text
+		image.Description, //description
 	}
 
-	metaImageChan <- &array
+	metaImageChan <- &imageinfo
 }
 
 //parse one source xml file
@@ -137,7 +172,7 @@ func parseSingleXML(sourcefile string) {
 
 	if err != nil {
 		log.Println(err)
-		panic(err)
+		panic(err.Error())
 	}
 
 	decoder := xml.NewDecoder(xmlfile)
@@ -151,7 +186,7 @@ func parseSingleXML(sourcefile string) {
 		}
 
 		if err != nil {
-			panic(err)
+			panic(err.Error())
 		}
 
 		// Inspect the type of the token just read.
@@ -174,14 +209,14 @@ func parseSingleXML(sourcefile string) {
 
 func findXMLFiles() []string {
 
-	files, err := filepath.Glob(fmt.Sprintf("%s/b2*.xml", sourceXMLdir))
+	files, err := filepath.Glob(fmt.Sprintf("%s/b2*.xml", Config.DataPath))
 
 	if err != nil {
 		panic(err)
 	}
 
 	if len(files) == 0 {
-		log.Printf(sourceXMLdir)
+		log.Printf(Config.DataPath)
 		panic(errors.New("Missing XML files"))
 	}
 
@@ -203,15 +238,33 @@ func logcounts() {
 	log.Printf("Parsed Images: %d   duplicates %d ", imageCount, duplicates)
 }
 
-func main() {
-
-	DBConnect(ConnectStr())
-
+func startImport() {
+	//prepare database
 	Migrate()
 	wg.Add(1)
+	//open database table
 	go StreamInTable("beeldbank_images", metaImageColumns, metaImageChan)
+	//stream xml into database
 	importXMLbeeldbank()
 	wg.Wait()
-	DB.Close()
-	logcounts()
+
+	err := DB.Close()
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
+func setUpEnvironment() {
+	//parse environment variables
+	err := envconfig.Process("xmlparser", &Config)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	DB = DBConnect(ConnectStr())
+}
+
+func main() {
+	setUpEnvironment()
+	startImport()
 }
