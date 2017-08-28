@@ -18,6 +18,7 @@ XMLPARSER_DATABASE = "beeldbank"
 XMLPARSER_PASSWORD = "insecure
 
 
+go get
 go build
 ./xmlparser
 

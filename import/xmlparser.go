@@ -1,3 +1,8 @@
+//Parse the beeldbank xml files and load the
+//data / attributes in database.
+//A seperate location indication table is created
+//which is later used to determine exect geo-loaction
+//of images in the "beeldbank" image archive.
 package main
 
 import (
@@ -88,13 +93,12 @@ func init() {
 		"creator",
 		"provenance",
 		"rights",
-		//"leverings_voorwaarden",
-		//"levering",
 		"date_text",
 		"description",
-		//"date_from",
-		//"date_to",
-		//"adres",
+		"date_from",
+		"date_to",
+		"levering",
+		"leverings_voorwaarden",
 	}
 	locationColumns = []string{
 		"image_id",
@@ -148,15 +152,17 @@ func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *s
 
 }
 
-func parseDateRange(dates string, image *BeeldbankImageXML) {
+func parseDateRange(dates string, image []string) {
 	sdates := strings.Split(dates, "-")
 
 	if len(sdates) == 2 {
-		image.DateFrom = sdates[0]
-		image.DateTo = sdates[1]
+		// date_from , date_to
+		image[9] = sdates[0]
+		image[10] = sdates[1]
 	} else if len(dates) == 1 {
-		image.DateFrom = sdates[1]
-		image.DateTo = sdates[1]
+		// date_from = date_to
+		image[9] = sdates[1]
+		image[10] = sdates[1]
 	}
 }
 
@@ -164,15 +170,19 @@ func parseDateRange(dates string, image *BeeldbankImageXML) {
 func sendMetaImageInChannel(image *BeeldbankImageXML) {
 
 	imageinfo := []string{
-		image.Identifier,  //image_id
-		image.Type,        //type
-		image.Source,      //source
-		image.Title,       //title
-		image.Creator,     //creator
-		image.Provenance,  //provenance
-		image.Rights,      //rights
-		image.DateText,    //date_text
-		image.Description, //description
+		image.Identifier,  //0  image_id
+		image.Type,        //1  type
+		image.Source,      //2  source
+		image.Title,       //3  title
+		image.Creator,     //4  creator
+		image.Provenance,  //5  provenance
+		image.Rights,      //6  rights
+		image.DateText,    //7  date_text
+		image.Description, //8  description
+		"",                //9  date_from
+		"",                //10 date_to
+		"",                //11 levering
+		"",                //12 leveringsvoorwaarden
 	}
 
 	for _, param := range image.ParameterList {
@@ -181,12 +191,15 @@ func sendMetaImageInChannel(image *BeeldbankImageXML) {
 		case "datering":
 			//log.Println("datering")
 			dates := param.Value
-			parseDateRange(dates, image)
+			parseDateRange(dates, imageinfo)
+
 		case "levering":
 			//log.Println("levering")
 			if param.Value == "ja" {
+				imageinfo[11] = "1"
 				image.Levering = true
 			} else {
+				imageinfo[11] = "0"
 				image.Levering = false
 			}
 		case "geografische naam":
