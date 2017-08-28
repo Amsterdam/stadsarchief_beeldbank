@@ -1,85 +1,146 @@
-import logging
+"""
+We use the objectstore to get the latest and
+greatest of the stadsarchief xml!
+"""
+
 import os
-from functools import lru_cache
+import logging
 
 from swiftclient.client import Connection
 
-log = logging.getLogger(__name__)
+import datetime
+
+from dateutil import parser
+
+log = logging.getLogger('objectstore')
+
+assert os.getenv('BEELDBANK_OBJECTSTORE_PASSWORD', 'need magixword')
+assert os.getenv('XMLPARSER_DATA_PATH', 'where to store xml?')
+
+OBJECTSTORE = dict(
+    VERSION='2.0',
+    AUTHURL='https://identity.stack.cloudvps.com/v2.0',
+    TENANT_NAME='BGE000081 Beeldbank',
+    TENANT_ID='2b4fd2c3fcc544d2a2f1c4256098e84d',
+    USER=os.getenv('OBJECTSTORE_USER', 'beeldbank'),
+    PASSWORD=os.getenv('BEELDBANK_OBJECTSTORE_PASSWORD'),
+    REGION_NAME='NL',
+)
+
+DATA_DIR = os.getenv('XML_PARSER_DATA_PATH', '/app/data/')
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("swiftclient").setLevel(logging.WARNING)
 
-os_connect = {
-    'auth_version': '2.0',
-    'authurl': 'https://identity.stack.cloudvps.com/v2.0',
-    'user': 'beeldbank',
-    'key': os.getenv('BEELDBANK_OBJECTSTORE_PASSWORD', 'insecure'),
-    'tenant_name': 'BGE000081_Cultuur',
-    'os_options': {
-        'tenant_id': '2b4fd2c3fcc544d2a2f1c4256098e84d',
-        'region_name': 'NL',
-        # 'endpoint_type': 'internalURL'
-    }
-}
 
-container = 'beeldbank'
-import_folder = 'Import'
-images_folder = 'Images'
-download_dir = '/app/data/'
+store = OBJECTSTORE
 
 
-@lru_cache(maxsize=None)
-def get_conn():
-    assert os.getenv('CULTUUR_OBJECTSTORE_PASSWORD')
-    return Connection(**os_connect)
+EXPECTED_FILES = [
+    '.xml',
+]
+SOURCE_DIR = 'Beeldbank XML'
+
+# global..
+os_conn = {}
 
 
-def get_full_container_list(container_name, **kwargs):
-    """
-    Return a listing of filenames in container `container_name`
-    :param container_name:
-    :param kwargs:
-    :return:
-    """
+def get_connection():
+
+    options = {
+        'tenant_id': store['TENANT_ID'],
+        'region_name': store['REGION_NAME'],
+        'endpoint_type': 'internalURL', }
+
+    log.debug("Do we run local? set ENV LOCAL to something")
+
+    if os.getenv('LOCAL', False):
+        log.debug("We run LOCAL!")
+        options.pop('endpoint_type')
+
+    new_handelsregister_conn = Connection(
+        authurl=store['AUTHURL'],
+        user=store['USER'],
+        key=store['PASSWORD'],
+        tenant_name=store['TENANT_NAME'],
+        auth_version=store['VERSION'],
+        os_options=options)
+
+    return new_handelsregister_conn
+
+
+def get_store_object(object_meta_data):
+    return os_conn.get_object(
+        SOURCE_DIR, object_meta_data['name'])[1]
+
+
+def get_full_container_list(conn, container, **kwargs):
     limit = 10000
     kwargs['limit'] = limit
+    page = []
+
     seed = []
-    _, page = get_conn().get_container(container_name, **kwargs)
+
+    _, page = conn.get_container(container, **kwargs)
     seed.extend(page)
 
     while len(page) == limit:
         # keep getting pages..
         kwargs['marker'] = seed[-1]['name']
-        _, page = get_conn().get_container(container_name, **kwargs)
+        _, page = conn.get_container(container, **kwargs)
         seed.extend(page)
+
     return seed
 
 
-def split_prefix(lst):
+def download_files(file_list):
+    # Download the latest data
+    for _, source_data_file in file_list:
+        xml_file = source_data_file['name'].split('/')[-1]
+        msg = 'Downloading: %s' % (xml_file)
+        log.debug(msg)
+
+        new_data = get_store_object(source_data_file)
+
+        # save output to file!
+        with open(f'{DATA_DIR}/{xml_file}', 'wb') as outputzip:
+            outputzip.write(new_data)
+
+
+def get_latest_xml_files():
     """
-    splits of all but the last
+    Download the expected files provided by mks / kpn
     """
-    return '_'.join(lst.split('_')[:-1])
+    file_list = []
+
+    meta_data = get_full_container_list(
+        os_conn, SOURCE_DIR)
+
+    for o_info in meta_data:
+        for expected_file in EXPECTED_FILES:
+            # if not expected continue.
+            if not o_info['name'].endswith(expected_file):
+                continue
+
+            dt = parser.parse(o_info['last_modified'])
+            now = datetime.datetime.now()
+
+            delta = now - dt
+
+            log.debug('AGE: %d %s', delta.days, expected_file)
+
+            if delta.days > 50:
+                log.error('DELEVERY IMPORTED FILES ARE TOO OLD!')
+                raise ValueError
+
+            log.debug('%s %s', expected_file, dt)
+            file_list.append((dt, o_info))
+
+    download_files(file_list)
 
 
-def copy_file_from_objectstore(file_name):
-    os.makedirs(download_dir + import_folder, exist_ok=True)
-    destination = download_dir + file_name
-    log.info("Download file %s to %s", file_name, destination)
-    with open(destination, 'wb') as f:
-        f.write(get_conn().get_object(container, file_name)[1])
-    return destination
-
-
-def fetch_import_file_names():
-    files = []
-
-    for file_object in get_full_container_list(
-            container, prefix=import_folder):
-        if file_object['content_type'] == 'application/directory':
-            continue
-
-        log.info("Found file %s", file_object['name'])
-        files.append(file_object['name'])
-    return files
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    os_conn = get_connection()
+    get_latest_xml_files()
