@@ -108,6 +108,8 @@ func init() {
 	}
 }
 
+//logdupes prints two xml image enries side by side
+//to compare attributes
 func logdupes(i1 BeeldbankImageXML, i2 BeeldbankImageXML) {
 
 	log.Printf(`
@@ -317,7 +319,7 @@ func startImport() {
 
 func setUpEnvironment() {
 	//parse environment variables
-	err := envconfig.Process("xmlparser", &Config)
+	err := envconfig.Process("beeldbank", &Config)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

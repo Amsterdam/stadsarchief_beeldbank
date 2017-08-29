@@ -9,15 +9,13 @@ Importeren van xml / rdf bestanden van het stadsarchief.
 
 environment varibales for import.
 
-    XMLPARSER_DEBUG = False
-    XMLPARSER_PORT = 5432
-    XMLPARSER_HOST = "database"
-    XMLPARSER_USER = "beeldbank"
-    XMLPARSER_DATA_PATH = "/app/data"
-    XMLPARSER_DATABASE = "beeldbank"
-    XMLPARSER_PASSWORD = "insecure"
-
-
+    BEELBANK_DEBUG = False
+    BEELBANK_PORT = 5432
+    BEELBANK_HOST = "database"
+    BEELBANK_USER = "beeldbank"
+    BEELBANK_DATA_PATH = "/app/data"
+    BEELBANK_DATABASE = "beeldbank"
+    BEELBANK_PASSWORD = "insecure"
 
 
 To download the latest xml / rdf(ish) files.
