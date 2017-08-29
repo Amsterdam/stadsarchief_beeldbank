@@ -97,15 +97,22 @@ def get_full_container_list(conn, container, **kwargs):
 def download_files(file_list):
     # Download the latest data
     for _, source_data_file in file_list:
+
         xml_file = source_data_file['name'].split('/')[-1]
         msg = 'Downloading: %s' % (xml_file)
         log.debug(msg)
 
+        output_file = f'{DATA_DIR}/{xml_file}'
+
+        if os.path.isfile(output_file):
+            log.debug('SKIPPED: File already downloaded %s', output_file)
+            continue
+
         new_data = get_store_object(source_data_file)
 
         # save output to file!
-        with open(f'{DATA_DIR}/{xml_file}', 'wb') as outputzip:
-            outputzip.write(new_data)
+        with open(output_file, 'wb') as outputxml:
+            outputxml.write(new_data)
 
 
 def get_latest_xml_files():

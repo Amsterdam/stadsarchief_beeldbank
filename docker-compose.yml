@@ -8,8 +8,11 @@ services:
       POSTGRES_DB: beeldbank
       POSTGRES_USER: beeldbank
       POSTGRES_PASSWORD: insecure
+    volumes:
+      - databasevolume:/tmp
 
-  import:
+
+  importer:
     build: import/
     ports:
       - "8109:8000"
@@ -18,11 +21,28 @@ services:
     environment:
       - DATAPUNT_API_URL=${DATAPUNT_API_URL:-https://api.data.amsterdam.nl/}
       - SECRET_KEY=insecure
-      - DATABASE_NAME=beeldbank
-      - DATABASE_USER=beeldbank
-      - DATABASE_PASSWORD=insecure
-      - JWT_SHARED_SECRET_KEY=insecure1234567890
-      - UWSGI_HTTP=0.0.0.0:8000
-      - UWSGI_MODULE=beeldbank.wsgi
-      - UWSGI_CALLABLE=application
-      - UWSGI_MASTER=1
+      - BEELDBANK_DATABASE=beeldbank
+      - BEELDBANK_USER=beeldbank
+      - BEELDBANK_PASSWORD=insecure
+      - LOCAL=true
+      - BEELDBANK_OBJECTSTORE_PASSWORD
+    # nice for testing..
+    volumes:
+      - data-volume:/app/data
+
+volumes:
+  data-volume:
+  databasevolume:
+
+
+#  api:
+#   build: api/
+#   ports: 8000
+#   links:
+#      - database
+#   environment:
+#      - JWT_SHARED_SECRET_KEY=insecure1234567890
+#      - UWSGI_HTTP=0.0.0.0:8000
+#      - UWSGI_MODULE=beeldbank.wsgi
+#      - UWSGI_CALLABLE=application
+#      - UWSGI_MASTER=1

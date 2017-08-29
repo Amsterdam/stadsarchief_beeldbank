@@ -9,7 +9,7 @@ import psycopg2
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
-log = logging.getLogger(__file__)
+log = logging.getLogger('bag_sql_recipes')
 
 Config = dict(
     DEBUG=os.getenv('BEELDBANK_DEBUG', True),
@@ -210,7 +210,7 @@ def image_stats():
     total_images_locations = check_distinct_image_counts('image_locations')
 
     log.debug(
-        'Bag1 %s, Bag2 %s total %s locations %.2f %%.',
+        '\n\nBag1 %s, Bag2 %s total %s locations %.2f %%.\n\n',
         count1, count2, total_images_locations,
         (count1 + count2) / total_images_locations * 100)
 
@@ -290,10 +290,11 @@ ALTER table geo_plaatjes_1 ADD column id serial PRIMARY KEY;
 if __name__ == '__main__':
     connection = get_db_connection()
 
-    # create_bag_table()
+    create_bag_table()
     simple_match_imagelocations()
     wider_match_range_imagelocations()
     validate_image_tables()
-    image_stats()
     create_geo_tables('image_bag_locaties_1', 'geo_image_locaties_1')
     create_geo_tables('image_bag_locaties_2', 'geo_image_locaties_2')
+
+    image_stats()
