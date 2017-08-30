@@ -147,7 +147,8 @@ func StreamInTable(tablename string, columns []string, rows <-chan *[]string) {
 		success++
 	}
 
-	log.Println("DONE!")
+	log.Printf("DONE! %s", tablename)
+
 	err = pgTable.Commit()
 
 	if err != nil {

@@ -63,9 +63,7 @@ def execute_sql(sql):
 
 def create_index(table, column):
     with connection.cursor() as cursor:
-        cursor.execute(f"""
-CREATE INDEX ON {table} ({column})
-        """)
+        cursor.execute(f"""CREATE INDEX ON {table} ({column})""")
 
 
 def create_bag_table():
@@ -213,6 +211,7 @@ def image_stats():
         '\n\nBag1 %s, Bag2 %s total %s locations %.2f %%.\n\n',
         count1, count2, total_images_locations,
         (count1 + count2) / total_images_locations * 100)
+    log.debug('these are distinct image_id counts.')
 
 
 def check_distinct_image_counts(table):
@@ -248,8 +247,8 @@ def create_geo_tables(source, geo_name):
     """
     Create geo tables with `date_from` and `geometrie`
     """
-    log.debug('Create view %s from %s', geo_name, source)
-    drop_view(geo_name)
+    log.debug('Create geo table %s from %s', geo_name, source)
+    drop_table(geo_name)
 
     execute_sql(f"""
 SELECT
@@ -259,33 +258,18 @@ SELECT
     i.date_from::int
 INTO {geo_name}
 FROM {source} ib
-LEFT JOIN beeldbank_images i on (ib.image_id=i.image_id);
-
-CREATE INDEX ON {geo_name} (geometrie);
-CREATE index ON {geo_name} (date_from);
-CREATE index ON {geo_name} (image_id);
-
-ALTER table {geo_name} ADD column id serial PRIMARY KEY;
+LEFT JOIN beeldbank_images i on (ib.image_id=i.image_id)
 """)
+
+    execute_sql(f"CREATE INDEX ON {geo_name} USING GIST (geometrie)")
+    execute_sql(f"CREATE index ON {geo_name} (date_from)")
+    execute_sql(f"CREATE index ON {geo_name} (image_id)")
+    execute_sql(f"ALTER table {geo_name} ADD column id serial PRIMARY KEY")
 
     count = count_table(geo_name)
     log.debug('%s has count %s', geo_name, count)
     assert count > 1000
 
-"""
-select ib.bag_locatie_id, ib.geometrie, i.image_id, i.date_from::int
-into geo_plaatjes_1
-from image_bag_locaties ib
-left join beeldbank_images i on (ib.image_id=i.image_id);
-
-
-create index on geo_plaatjes_1 (geometrie);
-create index on geo_plaatjes_1 (date_from);
-create index on geo_plaatjes_1 (image_id);
-
-ALTER table geo_plaatjes_1 ADD column id serial PRIMARY KEY;
-
-"""
 
 if __name__ == '__main__':
     connection = get_db_connection()
@@ -298,3 +282,5 @@ if __name__ == '__main__':
     create_geo_tables('image_bag_locaties_2', 'geo_image_locaties_2')
 
     image_stats()
+    connection.commit()
+    connection.close()
