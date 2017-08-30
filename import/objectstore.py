@@ -41,6 +41,7 @@ EXPECTED_FILES = [
     '.xml',
 ]
 SOURCE_DIR = 'Beeldbank XML'
+IMAGE_DIR = 'Beeldbank Files'
 
 # global..
 os_conn = {}
@@ -115,7 +116,7 @@ def download_files(file_list):
             outputxml.write(new_data)
 
 
-def get_latest_xml_files():
+def _get_latest_xml_files():
     """
     Download the expected files provided by mks / kpn
     """
@@ -147,7 +148,26 @@ def get_latest_xml_files():
     download_files(file_list)
 
 
+def _get_full_imageslist():
+    """
+    Download an overview of all image files
+    """
+
+    full_list = get_full_container_list(os_conn, IMAGE_DIR)
+
+    output_file = f'{DATA_DIR}/image_list.txt'
+
+    if os.path.isfile(output_file):
+        os.remove(output_file)
+
+    # save output to file!
+    with open(output_file, 'wb') as outputfile:
+        for line in full_list:
+            outputfile.write(str.encode(line['name']+'\n'))
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     os_conn = get_connection()
-    get_latest_xml_files()
+    _get_latest_xml_files()
+    _get_full_imageslist()

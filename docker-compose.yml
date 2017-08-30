@@ -28,7 +28,7 @@ services:
       - BEELDBANK_OBJECTSTORE_PASSWORD
     # nice for testing..
     volumes:
-      - data-volume:/app/data
+      - $PWD/import/data:/app/data
 
 volumes:
   data-volume:

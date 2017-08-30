@@ -9,29 +9,27 @@ Importeren van xml / rdf bestanden van het stadsarchief.
 
 environment varibales for import.
 
-    BEELBANK_DEBUG = False
-    BEELBANK_PORT = 5432
-    BEELBANK_HOST = "database"
-    BEELBANK_USER = "beeldbank"
-    BEELBANK_DATA_PATH = "/app/data"
-    BEELBANK_DATABASE = "beeldbank"
-    BEELBANK_PASSWORD = "insecure"
-
+    BEELDBANK_DEBUG = False
+    BEELDBANK_PORT = 5432
+    BEELDBANK_HOST = "database"
+    BEELDBANK_USER = "beeldbank"
+    BEELDBANK_DATA_PATH = "/app/data"
+    BEELDBANK_DATABASE = "beeldbank"
+    BEELDBANK_PASSWORD = "insecure"
 
 To download the latest xml / rdf(ish) files.
 
-      python objectstore.py
+	  # make sure that the BEELDBANK_OBJECTSTORE_PASSWORD is available:
+      docker-compose build importer
+      docker-compose run importer python objectstore.py
 
 Start a database
 
-      docker-compose up database
+      docker-compose up -d database
 
 Run the go xml importer.
 
-    go get
-    go build
-    ./xmlparser
-
+      docker-compose run importer xmlparser
 
 Image Geo-location
 -----------
@@ -52,7 +50,7 @@ Current process
 
 2) execute sql plan
 
-    python bag_sql_recepes.py
+    docker-compose run importer python bag_sql_recepes.py
 
 
 API
