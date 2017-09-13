@@ -160,7 +160,7 @@ def _get_full_imageslist():
     if os.path.isfile(output_file):
         os.remove(output_file)
 
-    # save output to file!
+    # save output to file
     with open(output_file, 'wb') as outputfile:
         for line in full_list:
             outputfile.write(str.encode(line['name']+'\n'))

@@ -1,11 +1,10 @@
-//Parse the beeldbank xml files and load the
-//data / attributes in database.
-//A seperate location indication table is created
-//which is later used to determine exect geo-loaction
-//of images in the "beeldbank" image archive.
+//	Parse the beeldbank xml files and load the data / attributes in database.
+//	A seperate location indication table is created which is later used to determine exect geo-loaction
+//	of images in the "beeldbank" image archive.
 package main
 
 import (
+	"bufio"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -14,12 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
 	"github.com/jinzhu/gorm"
-	"github.com/kelseyhightower/envconfig"
 )
 
-//Parameter information on images extra variables
+//	Parameter information on images extra variables
 type Parameter struct {
 	Name       string `xml:"name,attr"`
 	Value      string `xml:",chardata"`
@@ -28,7 +25,7 @@ type Parameter struct {
 	NumberTo   string `xml:"number_to"`
 }
 
-//BeeldbankImageXML is XML image mapping
+//	BeeldbankImageXML is XML image mapping
 type BeeldbankImageXML struct {
 	Identifier           string      `xml:"identifier"`
 	Source               string      `xml:"source"`
@@ -50,66 +47,24 @@ type BeeldbankImageXML struct {
 
 var (
 	imageIds map[string]BeeldbankImageXML
-	// total found images
+	//	total found images
 	imageCount int
 	duplicates int
-	success    int
-	failed     int
-	wg         sync.WaitGroup
-	DB         *gorm.DB
-	// source of beeldbank xml files
-	locatieImageChan  chan *[]string
-	metaImageChan     chan *[]string
-	imagelocationChan chan *[]string
-	metaImageColumns  []string
-	locationColumns   []string
-	Config            ConfigSpec
-)
+	//	source of beeldbank xml files
+	dataPath 		 string
 
-type ConfigSpec struct {
-	Debug    bool   `default:"false"`
-	Port     int    `default:"5432"`
-	User     string `default:"beeldbank"`
-	Password string `default:"insecure"`
-	Database string `default:"beeldbank"`
-	Host     string `default:"database"`
-	DataPath string `default:"/app/data"`
-}
+)
 
 func init() {
 	imageCount = 0
 	duplicates = 0
-	success = 0
-	failed = 0
 	imageIds = make(map[string]BeeldbankImageXML)
+	dataPath = "/app/data"
+
 	// TODO make environment variable
-	metaImageChan = make(chan *[]string, 3000)
-	locatieImageChan = make(chan *[]string, 3000)
-	metaImageColumns = []string{
-		"image_id",
-		"type",
-		"source",
-		"title",
-		"creator",
-		"provenance",
-		"rights",
-		"date_text",
-		"description",
-		"date_from",
-		"date_to",
-		"levering",
-		"leverings_voorwaarden",
-	}
-	locationColumns = []string{
-		"image_id",
-		"streetname",
-		"number_from",
-		"number_to",
-	}
 }
 
-//logdupes prints two xml image enries side by side
-//to compare attributes
+//	logdupes prints two xml image enries side by side to compare attributes
 func logdupes(i1 BeeldbankImageXML, i2 BeeldbankImageXML) {
 
 	log.Printf(`
@@ -128,9 +83,10 @@ creator %-15s  %15s
 	)
 }
 
-//parseXMLNode parse single rdf / xml description of image
-//detects duplicate ImageID's
-func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *string) {
+//	parseXMLNodeToChannel parse single rdf / xml description of image
+//	detects duplicate ImageID's and puts results on channels
+func parseXMLNodeToChannel(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *string,
+	metaImageChan chan *[]string, locationChan chan *[]string) {
 
 	var bbImage BeeldbankImageXML
 	var id string
@@ -149,9 +105,12 @@ func parseXMLNode(decoder *xml.Decoder, xmlNode *xml.StartElement, sourcefile *s
 		duplicates++
 	} else {
 		imageIds[id] = bbImage
-		sendMetaImageInChannel(&bbImage)
+		metaImage, locations := parseImageXML(&bbImage)
+		metaImageChan <- &metaImage
+		for _, location := range locations {
+			locationChan <- &location
+		}
 	}
-
 }
 
 func parseDateRange(dates string, image []string) {
@@ -168,10 +127,11 @@ func parseDateRange(dates string, image []string) {
 	}
 }
 
-//sendMetaImageInChannel as string array
-func sendMetaImageInChannel(image *BeeldbankImageXML) {
+//	parseImageXML as string array
+func parseImageXML(image *BeeldbankImageXML) ([]string, [][]string) {
+	var locations [][]string
 
-	imageinfo := []string{
+	metaImage := []string{
 		image.Identifier,  //0  image_id
 		image.Type,        //1  type
 		image.Source,      //2  source
@@ -188,48 +148,39 @@ func sendMetaImageInChannel(image *BeeldbankImageXML) {
 	}
 
 	for _, param := range image.ParameterList {
-		//log.Println(param)
 		switch paramName := param.Name; paramName {
 		case "datering":
-			//log.Println("datering")
 			dates := param.Value
-			parseDateRange(dates, imageinfo)
+			parseDateRange(dates, metaImage)
 
 		case "levering":
-			//log.Println("levering")
 			if param.Value == "ja" {
-				imageinfo[11] = "1"
+				metaImage[11] = "1"
 				image.Levering = true
 			} else {
-				imageinfo[11] = "0"
+				metaImage[11] = "0"
 				image.Levering = false
 			}
-		case "geografische naam":
 
-			locatie := []string{
+		case "geografische naam":
+			locations = append(locations, []string{
 				image.Identifier,
 				param.Straatnaam,
 				param.NumberFrom,
 				param.NumberTo,
-			}
-			locatieImageChan <- &locatie
-
+			})
 		}
 	}
 
-	metaImageChan <- &imageinfo
-
+	return metaImage, locations
 }
 
-//parse one source xml file
-func parseSingleXML(sourcefile string) {
-
+//	parse one source xml file
+func parseSingleXMLFileTo(sourcefile string, metaImageChan chan *[]string, locationChan chan *[]string) {
 	log.Println("Parsing:", sourcefile)
 
 	xmlfile, err := os.Open(sourcefile)
 	defer xmlfile.Close()
-
-	//bar = NewProgressBar(csvfile)
 
 	if err != nil {
 		log.Println(err)
@@ -254,80 +205,105 @@ func parseSingleXML(sourcefile string) {
 		switch xmlNode := token.(type) {
 
 		case xml.StartElement:
-			// If we just read a StartElement token
-			// ...and its name is "rdf:Description"
+			// If we just read a StartElement token and its name is "rdf:Description"
 			if xmlNode.Name.Local == "Description" {
 				imageCount++
-				// decode a whole chunk of following XML into the
-				// variable bbImage which is a BeeldbankImageXML
-				parseXMLNode(decoder, &xmlNode, &sourcefile)
+				// decode a whole chunk of following XML into the variable bbImage which is a BeeldbankImageXML
+				parseXMLNodeToChannel(decoder, &xmlNode, &sourcefile, metaImageChan, locationChan)
 			}
 		}
 	}
-	//prints some stats.
-	logcounts()
+
+	//	prints some stats.
+	log.Printf("Parsed Images: %d   duplicates %d ", imageCount, duplicates)
 }
 
 func findXMLFiles() []string {
-
-	files, err := filepath.Glob(fmt.Sprintf("%s/b2*.xml", Config.DataPath))
+	files, err := filepath.Glob(fmt.Sprintf("%s/b2*.xml", dataPath))
 
 	if err != nil {
 		panic(err)
 	}
 
 	if len(files) == 0 {
-		log.Printf(Config.DataPath)
+		log.Printf(dataPath)
 		panic(errors.New("Missing XML files"))
 	}
 
 	return files
 }
 
-func importXMLbeeldbank() {
+func queueFileListTo(imagefileChan chan *[]string) {
+	imagelist := fmt.Sprintf("%s/image_list.txt", dataPath)
+	log.Println("Parsing: ", imagelist)
+
+	if file, err := os.Open(imagelist); err == nil {
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			path := strings.Split(line, "/")
+			filename := path[len(path)-1]
+
+			if strings.Contains(filename, ".") {
+				image_id := strings.Split(filename, ".")[0]
+				imagefile := []string{
+					image_id,
+					line,
+				}
+
+				imagefileChan <- &imagefile
+			}
+		}
+
+		if err = scanner.Err(); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		log.Fatal(err)
+	}
+}
+
+func runImport(DB *gorm.DB) {
+	var wg sync.WaitGroup
+
+	//	stream xml into database
+	imageChan := make(chan *[]string, 3000)
+	locationChan := make(chan *[]string, 3000)
+
+	wg.Add(2)
+	go StreamInTable(imageTable, beeldbankImageColumns, imageChan, DB, &wg)
+	go StreamInTable(locationTable, imageLocationColumns, locationChan, DB, &wg)
 
 	files := findXMLFiles()
-
 	for _, file := range files {
-		parseSingleXML(file)
+		parseSingleXMLFileTo(file, imageChan, locationChan)
 	}
 
-	close(metaImageChan)
-	close(locatieImageChan)
-}
+	close(locationChan)
+	close(imageChan)
 
-func logcounts() {
-	log.Printf("Parsed Images: %d   duplicates %d ", imageCount, duplicates)
-}
+	//	stream file entries into database
+	imagefileChan := make(chan *[]string, 3000)
 
-func startImport() {
-	//prepare database
-	Migrate()
-	//open database table
-	wg.Add(2)
-	go StreamInTable("beeldbank_images", metaImageColumns, metaImageChan)
-	go StreamInTable("image_locations", locationColumns, locatieImageChan)
-	//stream xml into database
-	importXMLbeeldbank()
+	wg.Add(1)
+	go StreamInTable(fileTable, imageFileLocationColumns, imagefileChan, DB, &wg)
+
+	queueFileListTo(imagefileChan)
+	close(imagefileChan)
+
 	wg.Wait()
-
-	err := DB.Close()
-	if err != nil {
-		panic(err.Error())
-	}
-}
-
-func setUpEnvironment() {
-	//parse environment variables
-	err := envconfig.Process("beeldbank", &Config)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	DB = DBConnect(ConnectStr())
 }
 
 func main() {
-	setUpEnvironment()
-	startImport()
+	//	get databaseconnection
+	DB := DBConnect("beeldbank")
+	defer DBClose(DB)
+
+	//  prepare database
+	Migrate(DB)
+
+	//  start import to database
+	runImport(DB)
 }

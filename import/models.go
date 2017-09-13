@@ -2,8 +2,47 @@ package main
 
 import "time"
 
-//LocatieModel of and Image. One image can have a multiple
-//location indications
+var (
+	imageTable				 string
+	locationTable			 string
+	fileTable				 string
+	beeldbankImageColumns    []string
+	imageLocationColumns     []string
+	imageFileLocationColumns []string
+)
+
+func init() {
+	imageTable = "beeldbank_images"
+	locationTable = "image_locations"
+	fileTable = "image_file_locations"
+	beeldbankImageColumns = []string{
+		"image_id",
+		"type",
+		"source",
+		"title",
+		"creator",
+		"provenance",
+		"rights",
+		"date_text",
+		"description",
+		"date_from",
+		"date_to",
+		"levering",
+		"leverings_voorwaarden",
+	}
+	imageLocationColumns = []string{
+		"image_id",
+		"streetname",
+		"number_from",
+		"number_to",
+	}
+	imageFileLocationColumns = []string{
+		"image_id",
+		"objectstore_path",
+	}
+}
+
+//	LocatieModel of and Image. One image can have a multiple location indications
 type ImageLocation struct {
 	ID         uint `gorm:"primary_key"`
 	ImageID    string
@@ -14,7 +53,7 @@ type ImageLocation struct {
 	Geom       GeoPoint `sql:"type:geometry(Geometry,4326)"`
 }
 
-//BeeldbankImageModel database model
+//	BeeldbankImageModel database model
 type BeeldbankImage struct {
 	ID                   uint   `gorm:"primary_key"`
 	ImageID              string `gorm:"unique_index"`
@@ -31,6 +70,13 @@ type BeeldbankImage struct {
 	DateFrom             string
 	DateTo               string
 	Description          string
+}
+
+//	ImageFileLocation database model
+type ImageFileLocation struct {
+	ID                   uint   `gorm:"primary_key"`
+	ImageID              string `gorm:"unique_index"`
+	ObjectstorePath      string
 }
 
 type ImageParameters struct {

@@ -50,7 +50,7 @@ Current process
 
 2) execute sql plan
 
-    docker-compose run importer python bag_sql_recepes.py
+    docker-compose run importer python bag_sql_recipes.py
 
 
 API

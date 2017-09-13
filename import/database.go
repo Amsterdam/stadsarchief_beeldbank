@@ -4,33 +4,52 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
+	"github.com/kelseyhightower/envconfig"
 	"github.com/lib/pq"
 )
 
-//ConnectStr create string to connect to database
-func ConnectStr() string {
+type DBConfigSpec struct {
+	Debug    bool   `default:"false"`
+	Port     int    `default:"5432"`
+	User     string `default:"beeldbank"`
+	Password string `default:"insecure"`
+	Database string `default:"beeldbank"`
+	Host     string `default:"database"`
+}
+
+var (
+	DBConfig 	DBConfigSpec
+)
+
+//	ConnectStr create string to connect to database
+func connectStr(prefix string) string {
+	err := envconfig.Process(prefix, &DBConfig)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	otherParams := "sslmode=disable connect_timeout=5"
 	connectString := fmt.Sprintf(
 		"user=%s dbname=%s password='%s' host=%s port=%d %s",
-		Config.User,
-		Config.Database,
-		Config.Password,
-		Config.Host,
-		Config.Port,
+		DBConfig.User,
+		DBConfig.Database,
+		DBConfig.Password,
+		DBConfig.Host,
+		DBConfig.Port,
 		otherParams,
 	)
 	fmt.Println("Connecting..:", connectString)
 	return connectString
 }
 
-//DBConnect setup a database connection
-func DBConnect(connectStr string) *gorm.DB {
+//	setup a database connection
+func DBConnect(prefix string) *gorm.DB {
 	//db, err := sql.Open("postgres", connectStr)
-	db, err := gorm.Open("postgres", connectStr)
+	db, err := gorm.Open("postgres", connectStr(prefix))
 
 	if err != nil {
 		panic(err.Error())
@@ -39,46 +58,49 @@ func DBConnect(connectStr string) *gorm.DB {
 	return db
 }
 
-//Migrate add missing tables to database
-func Migrate() {
-	log.Printf("Create db tables..")
-
-	DB.DropTableIfExists(&ImageLocation{}, &BeeldbankImage{})
-	//Db = db
-	DB.AutoMigrate(&ImageLocation{}, &BeeldbankImage{})
-
+//	close a database connection
+func DBClose(DB *gorm.DB) {
+	err := DB.Close()
+	if err != nil {
+		panic(err.Error())
+	}
 }
 
-//SQLImport import structure
+
+//Migrate add missing tables to database
+func Migrate(DB *gorm.DB) {
+	log.Printf("Create db tables..")
+	DB.DropTableIfExists(&ImageLocation{}, &BeeldbankImage{}, &ImageFileLocation{})
+	DB.AutoMigrate(&ImageLocation{}, &BeeldbankImage{}, &ImageFileLocation{})
+}
+
+//	SQLImport import structure
 type SQLImport struct {
 	txn  *sql.Tx
 	stmt *sql.Stmt
 }
 
-//AddRow Add a single row of data to the database
+//	AddRow Add a single row of data to the database
 func (i *SQLImport) AddRow(columns ...interface{}) error {
 	_, err := i.stmt.Exec(columns...)
 	return err
 }
 
-//Commit the import to database
+//	Commit the import to database
 func (i *SQLImport) Commit() error {
-
 	_, err := i.stmt.Exec()
 	if err != nil {
 		panic(err)
 	}
 
-	// Statement might already be closed
-	// therefore ignore errors
+	// Statement might already be closed therefore ignore errors
 	_ = i.stmt.Close()
 
 	return i.txn.Commit()
 }
 
-//NewImport setup a new import struct
+//	NewImport setup a new import struct
 func newImport(db *sql.DB, schema string, tableName string, columns []string) (*SQLImport, error) {
-
 	txn, err := db.Begin()
 
 	if err != nil {
@@ -94,23 +116,20 @@ func newImport(db *sql.DB, schema string, tableName string, columns []string) (*
 }
 
 func normalizeRow(record *[]string) ([]interface{}, error) {
-
 	cols := make([]interface{}, len(*record))
 
 	for i, field := range *record {
-
 		if field == "" {
 			cols[i] = nil
 			continue
 		}
 		cols[i] = field
-
 	}
 
 	return cols, nil
 }
 
-//print columns we try to put in database
+//	print columns we try to put in database
 func printCols(cols []interface{}) {
 	log.Printf("columns:")
 	for i, field := range cols {
@@ -118,10 +137,11 @@ func printCols(cols []interface{}) {
 	}
 }
 
-//StreamInTable data from channel into specified database table.
-func StreamInTable(tablename string, columns []string, rows <-chan *[]string) {
-
+//	StreamInTable data from channel into specified database table.
+func StreamInTable(tablename string, columns []string, rows <-chan *[]string, DB *gorm.DB, wg *sync.WaitGroup) {
 	cdb := DB.CommonDB().(*sql.DB)
+	defer cdb.Close()
+	defer wg.Done()
 
 	pgTable, err := newImport(cdb, "public", tablename, columns)
 
@@ -130,12 +150,10 @@ func StreamInTable(tablename string, columns []string, rows <-chan *[]string) {
 	}
 
 	for row := range rows {
-
 		cols, err := normalizeRow(row)
 
 		if err != nil {
 			log.Println(err)
-			failed++
 			continue
 		}
 
@@ -143,16 +161,12 @@ func StreamInTable(tablename string, columns []string, rows <-chan *[]string) {
 			printCols(cols)
 			panic(err)
 		}
-
-		success++
 	}
 
-	log.Println("DONE!")
+	log.Println("DONE! inserting records in", tablename)
 	err = pgTable.Commit()
 
 	if err != nil {
 		panic(err)
 	}
-
-	wg.Done()
 }
