@@ -3,8 +3,8 @@ FROM amsterdam/docker_python:latest
 
 # Build the one Go binary we need for database import:
 FROM golang:latest as gobuilder
-WORKDIR /go/src/xmlparser
-COPY *.go /go/src/xmlparser/
+WORKDIR /go/src/importer
+COPY *.go /go/src/importer/
 RUN go get
 RUN go build
 
@@ -16,7 +16,7 @@ COPY requirements.txt /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
-COPY --from=gobuilder /go/src/xmlparser/xmlparser /bin/xmlparser
+COPY --from=gobuilder /go/src/importer/importer /bin/importer
 
 ## Do the .jenkins directory dance to enable data imports:
 #COPY .jenkins/import /.jenkins-import/

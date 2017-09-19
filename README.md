@@ -29,7 +29,7 @@ Start a database
 
 Run the go xml importer.
 
-      docker-compose run importer xmlparser
+      docker-compose run importer importer
 
 Image Geo-location
 -----------
