@@ -24,7 +24,6 @@ services:
       - BEELDBANK_DATABASE=beeldbank
       - BEELDBANK_USER=beeldbank
       - BEELDBANK_PASSWORD=insecure
-      - LOCAL=true
       - BEELDBANK_OBJECTSTORE_PASSWORD
     # nice for testing..
     volumes:
