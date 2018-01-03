@@ -1,5 +1,5 @@
 # We sadly need this line due to a bug in the Jenkins Docker Build Step plugin.
-FROM amsterdam/docker_python:latest
+FROM amsterdam/python
 
 # Build the one Go binary we need for database import:
 FROM golang:latest as gobuilder
@@ -9,7 +9,7 @@ RUN go get
 RUN go build
 
 # Build the Python app and copy the Go binary to it:
-FROM amsterdam/docker_python:latest
+FROM amsterdam/python
 
 WORKDIR /app
 COPY requirements.txt /app
